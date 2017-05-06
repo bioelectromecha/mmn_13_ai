@@ -60,7 +60,7 @@ class ReflexAgent(Agent):
         to create a masterful evaluation function.
         """
         # Useful information you can extract from a GameState (pacman.py)
-        successorGameState = currentGameState.generatePacmanSuccessor(action)
+        successorGameState = currentGameState.generateSuccessor(0, action)
         newPos = successorGameState.getPacmanPosition()
         oldFood = currentGameState.getFood()
         newGhostStates = successorGameState.getGhostStates()
@@ -141,53 +141,64 @@ class MinimaxAgent(MultiAgentSearchAgent):
             Returns the total number of agents in the game
         """
         "*** YOUR CODE HERE ***"
-        pacmanActions = gameState.getLegalPacmanActions()
-        pacmanActions.remove('Stop')  # every action except 'Stop'
-        # the action with the best worst-case scenario
-        bestAction = max(map(lambda action: (
-            self.minValue(gameState.generatePacmanSuccessor(action), 0, gameState.getNumAgents() - 1), action),
-                             pacmanActions))[1]
+
+        # all actions except 'stop'
+        pacmanActions = self.excludeStop(gameState.getLegalActions())
+
+        maxActionVal = -sys.maxint
+        bestAction = None
+        # find the action with the max value
+        for action in pacmanActions:
+            curActionVal = self.minValue(gameState.generateSuccessor(0, action), self.depth, 1)
+            if maxActionVal < curActionVal:  # a better action was found
+                maxActionVal = curActionVal
+                bestAction = action
         return bestAction
 
     def minValue(self, gameState, depth, ghostIndex):
         """ returns the worst evaluation """
-        # terminal checks
-        if gameState.isWin():
-            return sys.maxint
-        elif gameState.isLose():
-            return -sys.maxint
-        elif depth >= self.depth:
+        # terminal check
+        if gameState.isLose() or gameState.isWin():
             return self.evaluationFunction(gameState)
-        # else: we're not yet at the bottom
 
-        # all ghost have already played -
-        if ghostIndex == 0:
-            # return whatever pacman will decide to do
-            return self.maxValue(gameState, depth)
-        else:
-            ghostActions = gameState.getLegalActions(ghostIndex)
-            # return the worst outcome for pacman out of all ai moves
-            return min(map(
-                lambda action: self.minValue(gameState.generateSuccessor(ghostIndex, action), depth, ghostIndex - 1),
-                ghostActions))
+        # it's pacman's turn
+        if ghostIndex == gameState.getNumAgents():
+            return self.maxValue(gameState, depth - 1)
+
+        ghostActions = self.excludeStop(gameState.getLegalActions(ghostIndex))
+
+        minActionVal = sys.maxint
+        # find the lowest cost outcome out of all ai moves
+        for action in ghostActions:
+            minActionVal = min(minActionVal,
+                               self.minValue(gameState.generateSuccessor(ghostIndex, action), depth, ghostIndex + 1))
+        return minActionVal
 
     def maxValue(self, gameState, depth):
         """ returns the best evaluation """
-        # terminal checks
-        if gameState.isWin():
-            return sys.maxint
-        elif gameState.isLose():
-            return -sys.maxint
-        elif depth >= self.depth:
+        # terminal check
+        if depth == 0 or gameState.isLose() or gameState.isWin():
             return self.evaluationFunction(gameState)
-        # else: we're not yet at the bottom
-        pacmanActions = gameState.getLegalPacmanActions()
-        pacmanActions.remove('Stop')  # every action except 'Stop'
-        print pacmanActions
-        # return the best outcome out of all pacman moves
-        return max(map(lambda action: self.minValue(gameState.generatePacmanSuccessor(action), depth + 1,
-                                                    gameState.getNumAgents() - 1), pacmanActions))
 
+        pacmanActions = self.excludeStop(gameState.getLegalActions())
+
+        maxActionVal = -sys.maxint
+        # find the best cost outcome out of all pacman moves
+        for action in pacmanActions:
+            maxActionVal = max(maxActionVal, self.minValue(gameState.generateSuccessor(0, action), depth, 1))
+        return maxActionVal
+
+    def excludeStop(self, actions):
+        try:
+            actions.remove('Stop')  # every action except 'Stop'
+        except ValueError:
+            pass  # do nothing if stop is not there
+        return actions
+
+
+################################################################################################################################################
+################################################################################################################################################
+################################################################################################################################################
 
 class AlphaBetaAgent(MultiAgentSearchAgent):
     """
@@ -199,74 +210,62 @@ class AlphaBetaAgent(MultiAgentSearchAgent):
           Returns the minimax action using self.depth and self.evaluationFunction
         """
         "*** YOUR CODE HERE ***"
-        pacmanActions = gameState.getLegalPacmanActions()
-        pacmanActions.remove('Stop')  # every action except 'Stop'
+        # all actions except 'stop'
+        pacmanActions = self.excludeStop(gameState.getLegalActions())
+        actionDict = dict()
+        maxActionVal = self.maxValue(gameState, self.depth , -sys.maxint, sys.maxint, actionDict)
+        return actionDict.get(maxActionVal,None)
 
-        # the action with the least worst-case scenario
-        bestAction = max(map(lambda action: (
-            self.minValue(gameState.generatePacmanSuccessor(action), 0, gameState.getNumAgents() - 1, -sys.maxint, sys.maxint), action),
-                             pacmanActions))[1]
-        return bestAction
-
-
-    def minValue(self, gameState, depth, ghostIndex, alpha, beta):
-        """ 
-            returns the worst evaluation 
-        """
-        # terminal checks
-        if gameState.isWin():
-            return sys.maxint
-        elif gameState.isLose():
-            return -sys.maxint
-        elif depth >= self.depth:
+    def minValue(self, gameState, depth, ghostIndex, alpha, beta, actionDict):
+        """ returns the worst evaluation """
+        # terminal check
+        if gameState.isLose() or gameState.isWin():
             return self.evaluationFunction(gameState)
-        # else: we're not yet at the bottom
 
-        # all ghost have already played -
-        if ghostIndex == 0:
-            # return whatever pacman will decide to do
-            return self.maxValue(gameState, depth, alpha, beta)
-        else:
-            # it's an ai move
-            ghostActions = gameState.getLegalActions(ghostIndex)
-            minActionVal = sys.maxint
+        # it's pacman's turn
+        if ghostIndex == gameState.getNumAgents():
+            return self.maxValue(gameState, depth - 1, alpha, beta, actionDict)
 
-            # find the min cost outcome for pacman out of all ai moves
-            for action in ghostActions:
-                minActionVal = min( minActionVal, self.minValue(gameState.generateSuccessor(ghostIndex, action), depth, ghostIndex - 1, alpha, beta))
-                # prune
-                if alpha >= beta: break
-                # new beta
-                beta = min(beta,minActionVal)
-            return minActionVal
+        ghostActions = self.excludeStop(gameState.getLegalActions(ghostIndex))
 
+        minActionVal = sys.maxint
+        # find the lowest cost outcome out of all ai moves
+        for action in ghostActions:
+            minActionVal = min(minActionVal,
+                               self.minValue(gameState.generateSuccessor(ghostIndex, action), depth, ghostIndex + 1,
+                                             alpha, beta, actionDict))
+            # prune
+            if alpha >= minActionVal: break
+            # new beta
+            beta = min(beta, minActionVal)
+        return minActionVal
 
-    def maxValue(self, gameState, depth, alpha, beta):
-        """ 
-            returns the best evaluation
-        """
-        # terminal checks
-        if gameState.isWin():
-            return sys.maxint
-        elif gameState.isLose():
-            return -sys.maxint
-        elif depth >= self.depth:
+    def maxValue(self, gameState, depth, alpha, beta, actionDict):
+        """ returns the best evaluation """
+        # terminal check
+        if depth == 0 or gameState.isLose() or gameState.isWin():
             return self.evaluationFunction(gameState)
-        # else: we're not yet at the bottom
 
-        pacmanActions = gameState.getLegalPacmanActions()
-        pacmanActions.remove('Stop')  # every action except 'Stop'
+        pacmanActions = self.excludeStop(gameState.getLegalActions())
+
         maxActionVal = -sys.maxint
-
         # find the best cost outcome out of all pacman moves
         for action in pacmanActions:
-            maxActionVal = max( maxActionVal, self.minValue(gameState.generatePacmanSuccessor(action), depth + 1, gameState.getNumAgents() - 1, alpha, beta))
+            curVal = self.minValue(gameState.generateSuccessor(0, action), depth, 1, alpha, beta, actionDict)
+            actionDict[curVal] = action
+            maxActionVal = max(maxActionVal, curVal)
             # prune
-            if alpha >= beta: break
+            if maxActionVal >= beta: break
             # new alpha
             alpha = max(alpha, maxActionVal)
-
         return maxActionVal
+
+    def excludeStop(self, actions):
+        try:
+            actions.remove('Stop')  # every action except 'Stop'
+        except ValueError:
+            pass  # do nothing if stop is not there
+        return actions
 
 
 class ExpectimaxAgent(MultiAgentSearchAgent):
